@@ -1,0 +1,27 @@
+{% extends 'accountsbase.html' %}
+{% load static %}
+{% block body_part %}
+    <div class="main-wrapper account-wrapper">
+        <div class="account-page">
+			<div class="account-center">
+				<div class="account-box">
+                    <form action="/verify" class="form-signin" method='post'> {% csrf_token %}
+						<div class="account-logo">
+                            <a href="/"><img src="{% static 'assets/img/logo-dark.png' %}" alt=""></a>
+                        </div>
+                        <div class="form-group">
+                            <label>CODE</label>
+                            <input type="text" autofocus="" name='code' class="form-control">
+                        </div>
+                        <div class="form-group text-center">
+                            <button type="submit" class="btn btn-primary account-btn">SUBMIT</button>
+                        </div>
+                        <div class="text-center register-link">
+                            Verify Later? <a href="/">Skip</a>
+                        </div>
+                    </form>
+                </div>
+			</div>
+        </div>
+    </div>
+{% endblock %}
