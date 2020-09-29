@@ -96,8 +96,10 @@ $(document).ready(function() {
                 if (result)
                 {
                     //  simulate click the link
-                    window.location.href = data;
-                }
+                    $.post(data, function(data) {
+                        window.location.href = data.result
+                    });
+                };
             }
         }); 
     });

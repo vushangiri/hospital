@@ -664,7 +664,7 @@ textarea.form-control {
 	height: 18px;
 }
 .form-control.form-control-sm {
-	padding: 0.25rem 0.5rem;
+	padding: 0.25rem 1.2rem;
 }
 .card .card-header {
 	background-color: rgba(255, 255, 255, 0.1);

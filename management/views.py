@@ -1,21 +1,26 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views import View
-from .forms import DoctorsForm, UsercreateForm, PatientForm
-from .models import Doctors, passhash, profile_background, patients,verifycode
+from .forms import DoctorsForm, UsercreateForm, PatientForm, CreateForm
+from .models import Doctors, passhash, profile_background, patients,verifycode, test
 from django.contrib import messages
 from django.contrib.auth.models import User, auth
 import bcrypt
+from django.views.generic import DeleteView, View, TemplateView
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
-from django.views.generic import ListView,DetailView,DeleteView
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views.generic import ListView,DetailView,DeleteView, CreateView
+from django.views.generic.edit import UpdateView
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin, AccessMixin
+from django.contrib.messages.views import SuccessMessageMixin
+from django.views.decorators.csrf import csrf_exempt
 from datetime import datetime, date
 from random import randint
 import requests
 from requests.exceptions import HTTPError
 from django import template
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
+from django.utils.decorators import method_decorator
 
 '''# Create your views here.
 class remove_patients(DeleteView):
@@ -39,7 +44,7 @@ class remove_patients(DeleteView):
 def edit_patients(request,slug):
     return render(request,'blank-page.html')
 
-@login_required()
+'''@login_required()
 def remove_patients(request,slug):
     if request.user.is_superuser:
         
@@ -50,8 +55,44 @@ def remove_patients(request,slug):
     else:
         messages.info(request, 'You do not have permission')
         return redirect('/patientview')
+'''
+@method_decorator(csrf_exempt, name='dispatch')
+class RemovePatientsView(LoginRequiredMixin, DeleteView):
+    model = patients
+    success_message = 'Patient Successfully Removed'
+    success_url = '/patientview'
+    permission_denied_message = 'You do not have permission'
+    def dispatch(self, request, *args, **kwargs):
+        # maybe do some checks here for permissions ...
+        if request.user.is_superuser:
+            messages.success(self.request, self.success_message)
+            response_data = {"result": self.success_url}
+            resp = super(RemovePatientsView, self).dispatch(request, *args, **kwargs)
+            return JsonResponse(response_data)
+        else:
+            messages.error(self.request, self.permission_denied_message)
+            response_data = {"result": self.success_url}
+            return JsonResponse(response_data)
 
-@login_required()   
+@method_decorator(csrf_exempt, name='dispatch')
+class RemoveDoctorsView(LoginRequiredMixin, DeleteView):
+    model = Doctors
+    success_message = 'Doctor Successfully Removed'
+    success_url = '/doctors'
+    permission_denied_message = 'You do not have permission'
+    def dispatch(self, request, *args, **kwargs):
+        # maybe do some checks here for permissions ...
+        if request.user.is_superuser:
+            messages.success(self.request, self.success_message)
+            response_data = {"result": self.success_url}
+            resp = super(RemoveDoctorsView, self).dispatch(request, *args, **kwargs)
+            return JsonResponse(response_data)
+        else:
+            messages.error(self.request, self.permission_denied_message)
+            response_data = {"result": self.success_url}
+            return JsonResponse(response_data)
+
+'''@login_required()   
 def remove_doctors(request,slug):
     if request.user.is_superuser:
         query = Doctors.objects.get(slug=slug)
@@ -60,7 +101,7 @@ def remove_doctors(request,slug):
         return redirect('/doctors')
     else:
         messages.info(request, 'You do not have permission')
-        return redirect('/doctors')
+        return redirect('/doctors')'''
 
 @login_required()
 def verify(request):
@@ -84,120 +125,25 @@ def verify(request):
             else:
                 return render(request, 'verify.html')
 
-def logout(request):
-    auth.logout(request)
-    return redirect('/')
+class HomeView(LoginRequiredMixin, TemplateView):
+    def get(self, request, *args, **kwargs):
+        request.session.clear_expired()
+        count = Doctors.objects.all().count()
+        count1 = patients.objects.all().count()
+        doctorsdata = Doctors.objects.all()
+        patientsdata = patients.objects.order_by("-created_at")
+        today = date.today
+        context = { 
+            "Dashboard" : "active",
+            'count': count,
+            'count1':count1,
+            'doctorsdata':doctorsdata,
+            'patientsdata':patientsdata,
+            'today': today
+        }
+        return render(request, 'index.html', context)
 
-def login(request):
-    if request.method == 'POST':
-        username = request.POST['username']
-        password = request.POST['password']
-        
-        if User.objects.filter(username=username).exists()is False:
-            messages.info(request,'Username not found.')
-            return redirect('/accounts/login/')
-        else:
-            user1 = User.objects.get(username=username)
-            if user1.is_superuser:
-                user = auth.authenticate(username=username, password=password)
-
-                if user is not None:
-                    auth.login(request, user)
-                    return redirect("/")
-                else:
-                    messages.info(request, 'Invalid Password')
-                    return redirect('/accounts/login/')
-            else:
-                
-                
-                pdata = passhash.objects.get(user_id=user1.pk)
-                
-                p1 = bcrypt.hashpw(password.encode('utf-8'), pdata.salt.encode('utf-8'))
-                user = auth.authenticate(username=username, password=p1)
-                if user is not None:
-                    auth.login(request, user)
-                    return redirect('/')
-                else:
-                    messages.info(request, 'Invalid Password')
-                    return redirect('/accounts/login/')
-
-    else:
-        if request.user.is_authenticated:
-            return redirect('/')
-        else:
-            return render(request, 'login.html')
-
-def register(request):
-    data = UsercreateForm()
-    if request.method == 'POST':
-        data = UsercreateForm(request.POST)
-        password1 = request.POST['password1']
-        password2= request.POST['password2']
-        if data.is_valid():
-            username = data.cleaned_data['username']
-            email = data.cleaned_data['email']
-            first_name = data.cleaned_data['first_name']
-            last_name = data.cleaned_data['last_name']
-            if password1:
-                if password1 == password2:
-                    if User.objects.filter(username=username).exists():
-                        #print("username taken")
-                        messages.info(request,'username taken')
-                        return redirect('/accounts/register/')
-                    elif User.objects.filter(email=email).exists():
-                        #print('email taken')
-                        messages.info(request, 'email taken')
-                        return redirect('/accounts/register/')
-                    else:
-
-                        salt = bcrypt.gensalt()
-                        salt1 = salt.decode('utf-8')
-                        hashed = bcrypt.hashpw(password1.encode('utf-8'), salt)
-
-                        user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name,password=hashed)
-                        user.save();
-
-                        user_salt = passhash.objects.create(salt= salt1,user_id=user.pk)
-                        user_salt.save();
-
-                        psw = str(randint(100000, 999999))
-                        data = verifycode.objects.create(user_id=user.pk, code=psw)
-                        data.save()
-                        
-                        subject = 'New Account Registration'
-                        message = 'Congratulations for creating account with us, Your verification code is:' + str(psw)
-                        from_email = 'prabinoiid@gmail.com'
-                        recipient_list = [email]
-                        fail_silently = False
-                        send_mail(subject, message, from_email, recipient_list, fail_silently)
-                        messages.info(request, "user created")
-                        user = auth.authenticate(username=username, password=hashed)
-                        auth.login(request,user)
-                        return redirect('/verify')
-                else:
-                    #print('password matched')
-                    messages.info(request, 'password not matched')
-                    return redirect('/accounts/register/')
-            else:
-                messages.info(request, 'No valid password entered')
-                return redirect('/accounts/register/')
-        else:
-            messages.info(request, 'No valid data entered')
-            return redirect('/accounts/register/')
-
-    else:
-        if request.user.is_authenticated:
-            return redirect('/')
-        else:
-            data = UsercreateForm()
-    
-            context = { 
-                "Doctors" : "active",
-                "form" : data
-            }
-            return render(request,'register.html', context)
-
-@login_required()
+'''@login_required()
 def index(request):
     count = Doctors.objects.all().count()
     count1 = patients.objects.all().count()
@@ -219,214 +165,9 @@ def index(request):
         'today': today
     }
     return render(request, 'index.html', context)
-    
+    '''
 
 
-
-@login_required()
-def add_doctor(request):
-    data = DoctorsForm()
-    if request.method == 'POST':
-        data = DoctorsForm(request.POST, request.FILES)
-        password1 = request.POST['password1']
-        password2= request.POST['password2']
-        
-        
-        if data.is_valid():
-            username = data.cleaned_data['username']
-            email = data.cleaned_data['email']
-            first_name = data.cleaned_data['first_name']
-            last_name = data.cleaned_data['last_name']
-            if password1:
-                if password1 == password2:
-                    if User.objects.filter(username=username).exists():
-                        #print("username taken")
-                        messages.info(request,'username taken')
-                        return redirect('/add_doctor')
-                    elif User.objects.filter(email=email).exists():
-                        #print('email taken')
-                        messages.info(request, 'email taken')
-                        return redirect('/add_doctor')
-                    else:
-                        data.save()
-                        
-                        salt= bcrypt.gensalt()
-                        salt1 = salt.decode('utf-8')
-                        hashed = bcrypt.hashpw(password1.encode('utf-8'), salt)
-
-                        
-                        user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name, password=hashed)
-                        user.save()
-                        docdata = Doctors.objects.get(username=username)
-                        background = profile_background.objects.create(user_id=docdata.id)
-                        background.save()
-                        verify = verifycode.objects.create(user_id=user.pk, verified=True)
-                        verify.save()
-                        saltsave = passhash.objects.create(user_id=user.pk, salt=salt1)
-                        saltsave.save()
-                        subject = 'New Doctor account Registration'
-                        message = 'Congratulations doctor for joining us.'
-                        from_email = 'prabinoiid@gmail.com'
-                        recipient_list = [email]
-                        fail_silently = False
-                        send_mail(subject, message, from_email, recipient_list, fail_silently)
-                        
-                        messages.info(request, 'Saved')
-                        return redirect('/doctors')
-                        
-                else:
-                    messages.info(request,'Password does not match')
-                    return redirect('/add_doctor')
-            else:
-                messages.info(request, 'No valid password entered')
-                return redirect('/add_doctor')
-            
-        else:
-            messages.info(request, 'Data not valid')
-            return redirect('/add_doctor')
-    else:
-        data = DoctorsForm()
-  
-        context = { 
-            "Doctors" : "active",
-            "form" : data
-        }
-        return render(request, 'add_doctor.html', context)
-
-@login_required()
-def xtra(request):
-    result = {
-        'sent': 'email_taken'
-    }
-    return JsonResponse(result)
-
-@login_required()
-def add_patient(request):
-    data = PatientForm()
-    if request.method == 'POST':
-        data = PatientForm(request.POST, request.FILES)
-        password1 = request.POST['password1']
-        password2= request.POST['password2']
-        
-        
-        if data.is_valid():
-            username = data.cleaned_data['username']
-            email = data.cleaned_data['email']
-            first_name = data.cleaned_data['first_name']
-            last_name = data.cleaned_data['last_name']
-            
-            if User.objects.filter(email=email).exists():
-                resp = {
-                    'sent': 'email_taken'
-                }
-                return JsonResponse(resp)
-            elif User.objects.filter(username=username).exists():
-
-                resp = {
-                    'sent': 'username_taken'
-                }
-                return JsonResponse(resp)
-            
-            else:
-
-                if password1:
-                    if password1 == password2:
-                        
-                        data.save()
-                        
-                        salt= bcrypt.gensalt()
-                        salt1 = salt.decode('utf-8')
-                        hashed = bcrypt.hashpw(password1.encode('utf-8'), salt)
-
-                        
-                        user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name, password=hashed)
-                        user.save()
-                        verify = verifycode.objects.create(user_id=user.pk, verified=True)
-                        verify.save()
-                        
-                        saltsave = passhash.objects.create(user_id=user.pk, salt=salt1)
-                        saltsave.save()
-                        subject = 'New Patient account Registration'
-                        message = 'A user account has been created to receive reports online and send us your queries.'
-                        from_email = 'prabinoiid@gmail.com'
-                        recipient_list = [email]
-                        fail_silently = False
-                        send_mail(subject, message, from_email, recipient_list, fail_silently)
-                        messages.info(request, 'Patient Created')
-                        resp = {
-                            'sent': 'saved'
-                        }
-                        return JsonResponse(resp)
-                        
-                        #return redirect('/patientview')
-                            
-                    else:
-                        resp = {
-                            'sent': 'pass_not_matched'
-                        }
-                        return JsonResponse(resp)
-                        #messages.info(request,'Password does not match')
-                        #return redirect('/add_patient')
-                else:
-                    resp = {
-                        'sent': 'no_valid_pass'
-                    }
-                    return JsonResponse(resp)
-                    #messages.info(request, 'No valid password entered')
-                    #return redirect('/add_patient')
-            
-        else:
-            resp = {
-                'sent': 'data_not_valid'
-            }
-            return JsonResponse(resp)
-            #messages.info(request, 'Data not valid')
-            #return redirect('/add_patient')
-    else:
-        data = PatientForm()
-  
-        context = { 
-            "Patients" : "active",
-            "form" : data
-        }
-        return render(request, 'add_patient.html', context)
-
-@login_required()
-def add_patient_merge(request):
-    data = PatientForm()
-    if request.method == 'POST':
-        data = PatientForm(request.POST, request.FILES)
-        
-        
-        if data.is_valid():
-            email = data.cleaned_data['email']
-            user = User.objects.get(email=email)
-            data.username = user.username
-            data.first_name = user.first_name
-            data.last_name = user.last_name
-            data.email = user.email
-            data.save()
-            #verify = verifycode.objects.get(user_id=user.pk)           
-            #verify.save() 
-            subject = 'New Patient account Registration'
-            message = 'A user account has been created to receive reports online and send us your queries. An old account associated with email: ' + email + ' has been detected and merged as per your request.'
-            from_email = 'prabinoiid@gmail.com'
-            recipient_list = [email]
-            fail_silently = False
-            send_mail(subject, message, from_email, recipient_list, fail_silently)
-            messages.info(request, 'Accounts merged')
-            resp = {
-                'sent': 'saved'
-            }
-            return JsonResponse(resp)          
-        else:
-            resp = {
-                'sent': 'data_not_valid'
-            }
-            return JsonResponse(resp)
-    else:
-        messages.info(request, 'Internal error')
-        return redirect('/patientview')
 
 
 '''
@@ -628,6 +369,8 @@ def change_password(request):
         }
         return render(request, 'change-password.html', context)
 
+
+
 @login_required()
 def edit_profile(request, slug):
     profile = get_object_or_404(Doctors, slug=slug)
@@ -757,8 +500,8 @@ def profileview(request):
 
 
 class DoctorsView(LoginRequiredMixin, ListView):
+    paginate_by = 10
     model = Doctors
-    paginated_by = 12
     
     template_name = 'doctors.html'
     def get_context_data(self, **kwargs):
@@ -788,8 +531,378 @@ class DoctorsDataView(LoginRequiredMixin, DetailView):
         return context
     
 
+
+@login_required()
+def add_doctor(request):
+    data = DoctorsForm()
+    if request.method == 'POST':
+        data = DoctorsForm(request.POST, request.FILES)
+        password1 = request.POST['password1']
+        password2= request.POST['password2']
+        
+        
+        if data.is_valid():
+            username = data.cleaned_data['username']
+            email = data.cleaned_data['email']
+            first_name = data.cleaned_data['first_name']
+            last_name = data.cleaned_data['last_name']
+            
+            if User.objects.filter(email=email).exists():
+                #print("username taken")
+                resp = {
+                    'sent': 'email_taken'
+                }
+                return JsonResponse(resp)
+            elif User.objects.filter(username=username).exists():
+                #print('email taken')
+                resp = {
+                    'sent': 'username_taken'
+                }
+                return JsonResponse(resp)
+            else:
+                if password1:
+                    if password1 == password2:
+                    
+                        data.save()
+                        
+                        salt= bcrypt.gensalt()
+                        salt1 = salt.decode('utf-8')
+                        hashed = bcrypt.hashpw(password1.encode('utf-8'), salt)
+
+                        
+                        user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name, password=hashed)
+                        user.save()
+                        docdata = Doctors.objects.get(username=username)
+                        background = profile_background.objects.create(user_id=docdata.id)
+                        background.save()
+                        verify = verifycode.objects.create(user_id=user.pk, verified=True)
+                        verify.save()
+                        saltsave = passhash.objects.create(user_id=user.pk, salt=salt1)
+                        saltsave.save()
+                        subject = 'New Doctor account Registration'
+                        message = 'Congratulations doctor for joining us.'
+                        from_email = 'prabinoiid@gmail.com'
+                        recipient_list = [email]
+                        fail_silently = False
+                        send_mail(subject, message, from_email, recipient_list, fail_silently)
+                        messages.info(request, 'Doctor Created')
+                        resp = {
+                            'sent': 'saved'
+                        }
+                        return JsonResponse(resp)
+                        
+                    else:
+                        resp = {
+                            'sent': 'pass_not_matched'
+                        }
+                        return JsonResponse(resp)
+                else:
+                    resp = {
+                        'sent': 'no_valid_pass'
+                    }
+                    return JsonResponse(resp)
+            
+        else:
+            resp = {
+                'sent': 'data_not_valid'
+            }
+            return JsonResponse(resp)
+    else:
+        data = DoctorsForm()
+  
+        context = { 
+            "Doctors" : "active",
+            "form" : data
+        }
+        return render(request, 'add_doctor.html', context)
+
+@login_required()
+def add_doctor_merge(request):
+    data = DoctorsForm()
+    if request.method == 'POST':
+        data = DoctorsForm(request.POST, request.FILES)
+        
+        
+        if data.is_valid():
+            email = data.cleaned_data['email']
+            user = User.objects.get(email=email)
+            data.username = user.username
+            data.first_name = user.first_name
+            data.last_name = user.last_name
+            data.email = user.email
+            data.save()
+            #verify = verifycode.objects.get(user_id=user.pk)           
+            #verify.save() 
+            subject = 'New Doctor account Registration'
+            message = 'A user account has been created. An old account associated with email: ' + email + ' has been detected and merged as per your request.'
+            from_email = 'prabinoiid@gmail.com'
+            recipient_list = [email]
+            fail_silently = False
+            send_mail(subject, message, from_email, recipient_list, fail_silently)
+            messages.info(request, 'Accounts merged')
+            resp = {
+                'sent': 'saved'
+            }
+            return JsonResponse(resp)          
+        else:
+            resp = {
+                'sent': 'data_not_valid'
+            }
+            return JsonResponse(resp)
+    else:
+        messages.info(request, 'Internal error')
+        return redirect('/doctors')
+
+class test(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
+    model = test
+    template_name = 'test.html'
+    form_class = CreateForm
+    success_message = 'Done'
+    success_url = '/'
     
 
+
+@login_required()
+def add_patient(request):
+    data = PatientForm()
+    if request.method == 'POST':
+        data = PatientForm(request.POST, request.FILES)
+        password1 = request.POST['password1']
+        password2= request.POST['password2']
+        
+        
+        if data.is_valid():
+            username = data.cleaned_data['username']
+            email = data.cleaned_data['email']
+            first_name = data.cleaned_data['first_name']
+            last_name = data.cleaned_data['last_name']
+            
+            if User.objects.filter(email=email).exists():
+                resp = {
+                    'sent': 'email_taken'
+                }
+                return JsonResponse(resp)
+            elif User.objects.filter(username=username).exists():
+
+                resp = {
+                    'sent': 'username_taken'
+                }
+                return JsonResponse(resp)
+            
+            else:
+
+                if password1:
+                    if password1 == password2:
+                        
+                        data.save()
+                        
+                        salt= bcrypt.gensalt()
+                        salt1 = salt.decode('utf-8')
+                        hashed = bcrypt.hashpw(password1.encode('utf-8'), salt)
+
+                        
+                        user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name, password=hashed)
+                        user.save()
+                        verify = verifycode.objects.create(user_id=user.pk, verified=True)
+                        verify.save()
+                        
+                        saltsave = passhash.objects.create(user_id=user.pk, salt=salt1)
+                        saltsave.save()
+                        subject = 'New Patient account Registration'
+                        message = 'A user account has been created to receive reports online and send us your queries.'
+                        from_email = 'prabinoiid@gmail.com'
+                        recipient_list = [email]
+                        fail_silently = False
+                        send_mail(subject, message, from_email, recipient_list, fail_silently)
+                        messages.info(request, 'Patient Created')
+                        resp = {
+                            'sent': 'saved'
+                        }
+                        return JsonResponse(resp)
+                        
+                        #return redirect('/patientview')
+                            
+                    else:
+                        resp = {
+                            'sent': 'pass_not_matched'
+                        }
+                        return JsonResponse(resp)
+                        #messages.info(request,'Password does not match')
+                        #return redirect('/add_patient')
+                else:
+                    resp = {
+                        'sent': 'no_valid_pass'
+                    }
+                    return JsonResponse(resp)
+                    #messages.info(request, 'No valid password entered')
+                    #return redirect('/add_patient')
+            
+        else:
+            resp = {
+                'sent': 'data_not_valid'
+            }
+            return JsonResponse(resp)
+            #messages.info(request, 'Data not valid')
+            #return redirect('/add_patient')
+    else:
+        data = PatientForm()
+  
+        context = { 
+            "Patients" : "active",
+            "form" : data
+        }
+        return render(request, 'add_patient.html', context)
+
+@login_required()
+def add_patient_merge(request):
+    data = PatientForm()
+    if request.method == 'POST':
+        data = PatientForm(request.POST, request.FILES)
+        
+        
+        if data.is_valid():
+            email = data.cleaned_data['email']
+            user = User.objects.get(email=email)
+            data.username = user.username
+            data.first_name = user.first_name
+            data.last_name = user.last_name
+            data.email = user.email
+            data.save()
+            #verify = verifycode.objects.get(user_id=user.pk)           
+            #verify.save() 
+            subject = 'New Patient account Registration'
+            message = 'A user account has been created to receive reports online and send us your queries. An old account associated with email: ' + email + ' has been detected and merged as per your request.'
+            from_email = 'prabinoiid@gmail.com'
+            recipient_list = [email]
+            fail_silently = False
+            send_mail(subject, message, from_email, recipient_list, fail_silently)
+            messages.info(request, 'Accounts merged')
+            resp = {
+                'sent': 'saved'
+            }
+            return JsonResponse(resp)          
+        else:
+            resp = {
+                'sent': 'data_not_valid'
+            }
+            return JsonResponse(resp)
+    else:
+        messages.info(request, 'Internal error')
+        return redirect('/patientview')
+
+
+
+def logout(request):
+    auth.logout(request)
+    return redirect('/')
+
+def login(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        
+        if User.objects.filter(username=username).exists()is False:
+            messages.info(request,'Username not found.')
+            return redirect('/accounts/login/')
+        else:
+            user1 = User.objects.get(username=username)
+            if user1.is_superuser:
+                user = auth.authenticate(username=username, password=password)
+
+                if user is not None:
+                    auth.login(request, user)
+                    return redirect("/")
+                else:
+                    messages.info(request, 'Invalid Password')
+                    return redirect('/accounts/login/')
+            else:
+                
+                
+                pdata = passhash.objects.get(user_id=user1.pk)
+                
+                p1 = bcrypt.hashpw(password.encode('utf-8'), pdata.salt.encode('utf-8'))
+                user = auth.authenticate(username=username, password=p1)
+                if user is not None:
+                    auth.login(request, user)
+                    return redirect('/')
+                else:
+                    messages.info(request, 'Invalid Password')
+                    return redirect('/accounts/login/')
+
+    else:
+        if request.user.is_authenticated:
+            return redirect('/')
+        else:
+            return render(request, 'login.html')
+
+def register(request):
+    data = UsercreateForm()
+    if request.method == 'POST':
+        data = UsercreateForm(request.POST)
+        password1 = request.POST['password1']
+        password2= request.POST['password2']
+        if data.is_valid():
+            username = data.cleaned_data['username']
+            email = data.cleaned_data['email']
+            first_name = data.cleaned_data['first_name']
+            last_name = data.cleaned_data['last_name']
+            if password1:
+                if password1 == password2:
+                    if User.objects.filter(username=username).exists():
+                        #print("username taken")
+                        messages.info(request,'username taken')
+                        return redirect('/accounts/register/')
+                    elif User.objects.filter(email=email).exists():
+                        #print('email taken')
+                        messages.info(request, 'email taken')
+                        return redirect('/accounts/register/')
+                    else:
+
+                        salt = bcrypt.gensalt()
+                        salt1 = salt.decode('utf-8')
+                        hashed = bcrypt.hashpw(password1.encode('utf-8'), salt)
+
+                        user = User.objects.create_user(username=username, email=email, first_name=first_name, last_name=last_name,password=hashed)
+                        user.save();
+
+                        user_salt = passhash.objects.create(salt= salt1,user_id=user.pk)
+                        user_salt.save();
+
+                        psw = str(randint(100000, 999999))
+                        data = verifycode.objects.create(user_id=user.pk, code=psw)
+                        data.save()
+                        
+                        subject = 'New Account Registration'
+                        message = 'Congratulations for creating account with us, Your verification code is:' + str(psw)
+                        from_email = 'prabinoiid@gmail.com'
+                        recipient_list = [email]
+                        fail_silently = False
+                        send_mail(subject, message, from_email, recipient_list, fail_silently)
+                        messages.info(request, "user created")
+                        user = auth.authenticate(username=username, password=hashed)
+                        auth.login(request,user)
+                        return redirect('/verify')
+                else:
+                    #print('password matched')
+                    messages.info(request, 'password not matched')
+                    return redirect('/accounts/register/')
+            else:
+                messages.info(request, 'No valid password entered')
+                return redirect('/accounts/register/')
+        else:
+            messages.info(request, 'No valid data entered')
+            return redirect('/accounts/register/')
+
+    else:
+        if request.user.is_authenticated:
+            return redirect('/')
+        else:
+            data = UsercreateForm()
     
+            context = { 
+                "Doctors" : "active",
+                "form" : data
+            }
+            return render(request,'register.html', context)
     
 

@@ -6,7 +6,7 @@
 
 <link rel="stylesheet" type="text/css" href="{% static 'assets/css/bootstrap-datetimepicker.min.css' %}">
 <link rel="stylesheet" type="text/css" href="{% static 'assets/plugins/summernote/dist/summernote-bs4.css' %}">
-<!-- <link rel="stylesheet" type="text/css" href="{% static 'assets/xtra/loader.css' %}"> -->
+<link rel="stylesheet" type="text/css" href="{% static 'assets/xtra/loader.css' %}"> 
 {% endblock %}
 {% block body_part %}
 
@@ -20,7 +20,7 @@
         </div>
         <div class="row">
             <div class="col-lg-8 offset-lg-2">
-                <form action='add_doctor' method='post'  enctype="multipart/form-data"> {% csrf_token %}
+                <form action='add_doctor' method='post' id='adddoctor' enctype="multipart/form-data"> {% csrf_token %}
                     <div class="row">
                         <div class="col-sm-6">
                             <div class="form-group">
@@ -173,5 +173,5 @@
 <script src="{% static 'assets/plugins/summernote/dist/summernote-bs4.min.js' %}"></script>
 <script src="{% static 'assets/js/moment.min.js' %}"></script>
 <script src="{% static 'assets/js/bootstrap-datetimepicker.min.js' %}"></script>
-<!-- <script src="{% static 'assets/xtra/add_doctor.js' %}"></script> -->1
+<script src="{% static 'assets/xtra/add_doctor.js' %}"></script>
 {% endblock %}

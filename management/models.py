@@ -27,27 +27,32 @@ STATE=[
     ('07', '07')
 ]
 
+
+
 # Create your models here.
+class test(models.Model):
+    first_name = models.CharField(max_length=100, blank=True, null=True)
+    last_name = models.CharField(max_length=100, blank=True, null=True)
 
 
 class Doctors(models.Model):
-    first_name = models.CharField(max_length=50)
-    last_name = models.CharField(max_length=50)
-    username = models.CharField(max_length=50)
-    email = models.EmailField()
-    dob = models.DateField()
-    gender = models.CharField(max_length=20, choices=TYPE_SELECT)
-    address = models.CharField(max_length=100)
-    country = CountryField(multiple=False)
-    city = models.CharField(max_length=60)
-    state = models.CharField(max_length=10, choices=STATE)
-    postalcode = models.IntegerField()
-    phone = models.BigIntegerField()
+    first_name = models.CharField(max_length=50, blank=True, null=True)
+    last_name = models.CharField(max_length=50, blank=True, null=True)
+    username = models.CharField(max_length=50, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    dob = models.DateField(blank=True, null=True)
+    gender = models.CharField(max_length=20, choices=TYPE_SELECT, blank=True, null=True)
+    address = models.CharField(max_length=100, blank=True, null=True)
+    country = CountryField(multiple=False, blank=True, null=True)
+    city = models.CharField(max_length=60, blank=True, null=True)
+    state = models.CharField(max_length=10, choices=STATE, blank=True, null=True)
+    postalcode = models.IntegerField(blank=True, null=True)
+    phone = models.BigIntegerField(blank=True, null=True)
     photo = models.ImageField(upload_to='pics', blank=True, null=True)
-    bio = models.TextField()
-    status = models.CharField(max_length=20, choices=STATUS_SELECT)
-    expertise = models.CharField(max_length=50)
-    slug = AutoSlugField(populate_from='username', unique=True)
+    bio = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_SELECT, blank=True, null=True)
+    expertise = models.CharField(max_length=50, blank=True, null=True)
+    slug = AutoSlugField(populate_from='first_name', unique=True)
 
     def __str__(self):
         return self.first_name
@@ -83,7 +88,7 @@ class patients(models.Model):
     postalcode = models.IntegerField()
     phone = models.BigIntegerField()
     photo = models.ImageField(upload_to='pics')
-    symptom = models.CharField(max_length=100)
+    symptom = models.CharField(max_length=2000)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     slug = AutoSlugField(populate_from='username', unique=True)

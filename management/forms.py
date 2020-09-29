@@ -1,5 +1,5 @@
 from django import forms
-from .models import Doctors, patients
+from .models import Doctors, patients, test
 from django_countries.widgets import CountrySelectWidget
 from django.contrib.auth.models import User
 
@@ -25,11 +25,7 @@ STATE=[
     ('07', '07')
 ]
 class DoctorsForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        for key in self.Meta.required:
-            self.fields[key].required = False
+    
     
     dob = forms.DateField(
         input_formats=['%d/%m/%Y'],
@@ -63,25 +59,7 @@ class DoctorsForm(forms.ModelForm):
             'expertise'
             
         ]
-        required = [
-            'first_name',
-            'last_name',
-            'username',
-            'email',
-            'dob',
-            'gender',
-            'address',
-            'country',
-            'city',
-            'state',
-            'postalcode',
-            'phone',
-            'photo',
-            'bio',
-            'status',
-            'expertise'
-            
-        ]
+        
 
        
         widgets = {
@@ -343,4 +321,27 @@ class PatientForm(forms.ModelForm):
         }
 
 
+class CreateForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
+        for key in self.Meta.required:
+            self.fields[key].required = True
+    class Meta:
+        model = test
+        fields = '__all__'
+        required = [
+            'first_name'
+        ]
+        widgets = {
+            'first_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'type': 'text'
+                
+            }),
+            'last_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'type': 'text'
+                
+            })
+        }
